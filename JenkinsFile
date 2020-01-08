@@ -1,0 +1,598 @@
+def SEC_PASS=0
+def QUA_PASS=0
+def jsonObj
+
+def CLEAN_BUILD_CACHE = false
+def PLUGIN_DOWNLOAD = false
+def RELEASE_TYPE = 'debug'
+
+def PLUGIN_LIST = [
+    "cncbi-android-imeutil": "master",	
+    "cncbi-app-call-app": "master",
+    "cncbi-app-delegate-category": "master",
+    "cncbi-baidu-push": "master",
+    "cncbi-base64": "master",
+    "cncbi-catfish-air": "v4.0.2",
+    "cncbi-custom-contact": "master",
+    "cncbi-custom-geolocation": "master",
+    "cncbi-custom-webview": "master",
+    "cncbi-diagnostic": "master",
+    "cncbi-in-app-provisioning": "master",
+    "cncbi-ios-quitapp": "master",
+    "cncbi-jailbreak-detection": "master",
+    "cncbi-localization-strings": "master",
+    "cncbi-mfp": "master",
+    "cncbi-mfp-jsonstore": "master",
+    "cncbi-mfp-push-ios": "master",
+    "cncbi-moxtra-webchat": "master",
+    "cncbi-multiscreen-detector": "master",	
+    "cncbi-nnl": "master",
+    "cncbi-privacyscreen": "master",
+    "cncbi-qf-custom-webview": "master",
+    "cncbi-qrscanner": "support-swift4",
+    "cncbi-sensetime": "FirstImgFix",
+    "cncbi-sso": "master",
+    "cncbi-webpin": "master"
+    ]
+
+def APP_ENV = [
+    'sit': 'mvp',
+    'uat': 'mvp'
+    ]
+
+def ARTIFACT_ID = 'inmotion'
+def GROUP_ID = 'com.citic'
+def APP_VERSION = "1.0.${BUILD_NUMBER}"
+def ANDROID_APP_NAME = "android-universal-debug.apk"
+def IOS_APP_NAME = 'inMotion.ipa'
+
+def GRADLE_FILE = '/Users/jenkins/workspace/download/gradle-4.6-all.zip'
+def NODE_SASS_PATH = '/Users/jenkins/workspace/download/darwin-x64-48_binding.node'
+def NODE10_PATH = '/Users/jenkins/.nvm/versions/node/v10.17.0/bin'
+def OC_NAMESPACE = 'directbank'
+def OPENSHIFT_CERT = '/Users/jenkins/Downloads/certs/root-ca-bundle.crt'
+def WORKING_DIRECTORY = "/Users/jenkins/work/jenkins-build"
+
+def BITBUCKET_CREDENTIAL_ID = 'directbank-bitbucket'
+def BITBUCKET_PROJECT = 'inmo'
+def BITBUCKET_REPO = 'directbank-mobile'
+def BITBUCKET_REPO_BRANCH = 'OCT_RELEASE'
+def BITBUCKET_TEST_REPO = 'directbank-mobile-test'
+def BITBUCKET_TEST_REPO_BRANCH = 'master'
+def BITBUCKET_URL = 'https://bitbucket-bitbucket.app.orc.oc01.cncbi'
+
+def JIRA_INSTANCE = 'e8c8fa13-4d37-4de7-807e-4cbedf0a3769'
+def JIRA_PROJECT_KEY = 'GOOD'
+def JIRA_SITE = 'jira'
+
+def NEXUS_CREDENTIAL_ID = "nexus"
+def NEXUS_MAVEN_REPO = 'maven-public'
+def NEXUS_NPM_REPO = 'npm-public'
+def NEXUS_PROTOCOL = "https"
+def NEXUS_REPOSITORY = "directbank-mobile"
+def NEXUS_URL = "nexus-nexus.app.orc.oc01.cncbi"
+def NEXUS_USER_TOKEN = 'FFo_C7zk:TMskURbDPotThZ2UGPTYClqExofMY5wFMB1xlBKHAVe_'
+def NEXUS_VERSION = "nexus3"
+
+def SONAR_ENVIRONMENT = 'sonarqube'
+def SONAR_PROJECT_KEY = 'directbank-mobile'
+def SONAR_URL = 'https://sonarqube-sonarqube.app.orc.oc01.cncbi'
+
+def associateNexusTag(nexusUrl, nexusCredential, nexusRepo, groupId, artifactId, version, tagName){
+    sh "curl -u ${nexusCredential} -X POST '${nexusUrl}/service/rest/v1/tags/associate/${tagName}?wait=true&repository=${nexusRepo}&format=maven2&group=${groupId}&name=${artifactId}&version=${version}' -H 'accept: application/json'"
+}
+
+def buildApp(workingDirectory, env, buildEnv, nexusMavenRepo, androidAppName, releaseType) {
+    dir("${workingDirectory}") {
+        sh "gsed -i \"s|var env.*.;|var env = '${env}-${buildEnv}';|\" build/rollup.config.js"
+        sh "cp -vf build/${buildEnv}/${env}/config.xml ."
+        sh "rm -rf node_modules"
+        sh "rm -f package-lock.json"
+        sh "npm install; cordova prepare"
+        sh "cordova prepare android"
+        sh "cordova prepare ios"
+        sh "npm run ionic:build"
+    }
+    dir("${workingDirectory}/platforms/android") {
+        sh "sed -i '.target.bak' 's/target=android-26/target=android-28/' project.properties"
+        sh "sed -i '.support1.bak' 's/cordova.system.library.1=com.android.support:support-v4:24.1.1+/#cordova.system.library.1=com.android.support:support-v4:24.1.1+/' project.properties"
+        sh "sed -i '.support2.bak' 's/cordova.system.library.2=com.android.support:support-v4:+/#cordova.system.library.2=com.android.support:support-v4:+/' project.properties"
+        sh "sed -i '.androidbk1.bak' -e 's/<application/<application android:allowBackup=\"true\"/' AndroidManifest.xml"
+        sh "gsed -i 's|android:theme\">|android:theme, android:allowBackup\">|' AndroidManifest.xml"
+        sh "rm -f libs/gson-2.3.1.jar"
+        sh "gsed -i \"s|'com.android.tools.build:gradle.*'|'com.android.tools.build:gradle:3.2.0'|g\" build.gradle"
+    }
+    dir("${workingDirectory}") {
+        if (releaseType == 'release') {
+            sh 'cordova build android --release'
+            //sh 'cordova build ios --release'
+        }
+        else {
+            sh 'cordova build android'
+            //sh 'cordova build ios'
+        }
+    }
+} 
+
+def checksumSha1(workingDirectory, nexusUrl, nexusRepo, groupId, artifactId, version, classifier, extension, artifactName){
+    dir("${workingDirectory}") {
+        sh """
+            echo "Checksum Artifact: ${artifactName}"
+            curl -s -X GET '${nexusUrl}/service/rest/v1/search/assets?repository=${nexusRepo}&group=${groupId}&name=${artifactId}&version=${version}&maven.extension=${extension}&maven.classifier=${classifier}' | grep -o -E '"sha1" : "\\b[0-9a-f]{40}\\b"' | awk '{print \$3}'
+            checksumRemote=\$(curl -s -X GET '${nexusUrl}/service/rest/v1/search/assets?repository=${nexusRepo}&group=${groupId}&name=${artifactId}&version=${version}&maven.extension=${extension}&maven.classifier=${classifier}' | grep -o -E '"sha1" : "\\b[0-9a-f]{40}\\b"' | awk '{print \$3}')
+            echo "Checksum from remote: \$checksumRemote"
+            checksumLocal=\$(shasum -a 1 ${artifactName} | awk '{print \$1}')
+            echo "Checksum from local: \$checksumLocal"
+            if [ \$checksumRemote == \\\"\$checksumLocal\\\" ]; then echo 'Checksum Pass'; else echo 'Checksum Failed !'; rm -f ${artifactName}; exit 1; fi
+        """
+    }
+}
+
+def cleanBuildCache(workingDirectory) {
+    dir("${workingDirectory}") {
+        // NPM Global Cache
+        sh "tree -L 1 ${HOME}/.nvm/versions/node/v6.11.0/lib/node_modules"
+        sh "find ${HOME}/.nvm/versions/node/v6.11.0/lib/node_modules -type d -mindepth 1 -maxdepth 1 | grep -ve \"/npm\$\" | xargs -I {} rm -rf {}"
+        sh "tree -L 1 ${HOME}/.nvm/versions/node/v6.11.0/lib/node_modules"
+        // NPM Local Cache
+        sh "npm cache clean --force"
+        sh "rm -rf ${HOME}/.npm"
+        // Gradle Daemon
+        sh "gradle --status"
+        sh "gradle --stop"
+        sh "gradle --status"
+        // Gradle Cache
+        sh "find ${HOME}/.gradle -type d -mindepth 1 -maxdepth 1 | xargs -I {} rm -rf {}"
+        sh "tree ${HOME}/.gradle"
+    }
+}
+
+def createJiraIssue(jiraSite, jiraProjectKey, issueSummary, issueDescription, issuetype) {
+    withEnv(["JIRA_SITE=${jiraSite}"]){
+        script{     
+            def issue = [fields:[project: [key: jiraProjectKey],
+            summary: issueSummary,
+            description: issueDescription,
+            issuetype: [name: issuetype]]]
+ 
+            response = jiraNewIssue issue: issue
+            echo response.successful.toString()
+            echo response.data.toString()
+        }
+    }
+}
+
+def createJiraXrayReport(workingDirectory, testEnvironment, jiraProjectKey, jiraInstance) {
+    dir("${workingDirectory}") {
+        step([$class: 'XrayImportBuilder', 
+        endpointName: '/junit', 
+        importFilePath: "*/junit/target/surefire-reports/*.xml", 
+        importToSameExecution: 'false', 
+        testEnvironments: testEnvironment,
+        projectKey: jiraProjectKey, 
+        serverInstance: jiraInstance])
+    }
+}
+
+def downloadArtifact(workingDirectory, nexusUrl, nexusRepo, groupId, artifactId, version, classifier, extension, artifactName) {
+    dir("${workingDirectory}") {
+        // Download Artifact from Nexus Maven Repo
+        sh "curl -X GET -L '${nexusUrl}/service/rest/v1/search/assets/download?repository=${nexusRepo}&group=${groupId}&name=${artifactId}&version=${version}&maven.extension=${extension}&maven.classifier=${classifier}' -o ${artifactName}"
+        sh "chmod u+x ${artifactName}"
+    }
+}
+
+def downloadSourceCodeGitLfs(credentials, gitUrl, gitProject, gitRepo, gitBranch, workingDirectory) {
+    dir("${workingDirectory}") {
+        sh "git init"
+        sh "git config --add http.${gitUrl}.proxy ''"
+        sh "git config credential.helper cache"
+        checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: gitBranch]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'GitLFSPull']], submoduleCfg: [], userRemoteConfigs: [[credentialsId: credentials, url: "${gitUrl}/scm/${gitProject}/${gitRepo}.git"]]]
+        sh "git lfs fetch --all"
+        sh "git credential-cache exit"
+    }
+}
+
+def uploadArtifactToNexus(workingDirectory, nexusProtocol, nexusUrl, nexusRepo, nexusCred, groupID, artifactID, appVersion, classifier, fileType, filePath) {
+    dir("${workingDirectory}"){
+        script {
+            if (classifier == 'prod') {
+                classifier = ''
+            }    
+            nexusArtifactUploader(
+                nexusVersion: 'nexus3',
+          	    protocol: nexusProtocol,
+          	    nexusUrl: nexusUrl, 
+          	    groupId: groupID,
+          	    version: appVersion,
+          	    repository: nexusRepo,
+          	    credentialsId: nexusCred,
+          	    artifacts: [
+              	    [artifactId: artifactID,
+              	    classifier: classifier,
+              	    file: filePath,
+              	    type: fileType]
+          	    ]
+            );
+        }
+    }
+}
+
+def shutdownAndroidSimulator() {
+    sh 'adb devices | grep emulator | cut -f1 | while read line; do adb -s $line emu kill; done'
+}
+
+def shutdownIosSimulator() {
+    sh 'killall "Simulator"'
+}
+
+
+pipeline {
+    agent {
+        node {
+            label 'mac'
+        }
+    }
+    environment {
+        // SET Android Home
+        ANDROID_HOME = "$HOME/Library/Android/sdk"
+        
+        // SET JAVA HOME
+        JAVA_HOME = "/Library/Java/JavaVirtualMachines/jdk1.8.0_171.jdk/Contents/Home"
+        
+        // SET GRADLE HOME
+        GRADLE_HOME = "/usr/local/opt/gradle"
+        
+        // SET GRADLE FILE FOR Cordova Build
+        CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL = "file:${GRADLE_FILE}"
+        
+        // SET MAVEN HOME
+        MAVEN_HOME = "/usr/local/apache-maven-3.5.4"
+
+        // SET NODE6 PATH
+        NODE6_HOME = "/Users/jenkins/.nvm/versions/node/v6.11.0"
+
+        // SET Sonar Scanner 
+        SONAR_HOME = '/usr/local/opt/sonar-scanner-4.0.0.1744-macosx'
+        
+        // SET PATH
+        PATH = "$NODE6_HOME/bin:$PATH:$JAVA_HOME/bin:$ANDROID_HOME/tools/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/build-tools/28.0.3:$GRADLE_HOME/bin:$SONAR_HOME/bin:$MAVEN_HOME/bin"
+    
+        // SET Network Proxy
+        //export http_proxy = 'http://10.10.35.100:8080'
+        //export https_proxy = 'http://10.10.35.100:8080'
+        //export no_proxy = '"localhost, *.app.orc.oc01.cncbi"'
+    }
+    stages {
+        stage('Download Source Code') {
+            steps {
+                dir("${WORKING_DIRECTORY}") {
+                    script {
+                        sh "rm -rf ${BITBUCKET_PROJECT}"
+                        sh "mkdir -p ${BITBUCKET_PROJECT}/${BITBUCKET_REPO}"
+                        if(PLUGIN_DOWNLOAD == true) {
+                            sh "rm -rf plugin"
+                            sh "mkdir -p plugin"
+                            PLUGIN_LIST.each { plugin ->
+                                sleep 1
+                                sh "mkdir -p plugin/${plugin.key}"
+                                downloadSourceCodeGitLfs(BITBUCKET_CREDENTIAL_ID, BITBUCKET_URL, BITBUCKET_PROJECT, plugin.key, plugin.value, "${WORKING_DIRECTORY}/plugin/${plugin.key}")
+                            }
+                        }
+                        else {
+                            echo "Skip downloading plugins."
+                        }
+                    }
+                    downloadSourceCodeGitLfs(BITBUCKET_CREDENTIAL_ID, BITBUCKET_URL, BITBUCKET_PROJECT, BITBUCKET_REPO, BITBUCKET_REPO_BRANCH, "${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}")
+                }
+            }
+        }
+        stage('Setup Build Environment') {
+            steps {
+                script {
+                    dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                        if(CLEAN_BUILD_CACHE == true) {
+                            cleanBuildCache("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}")
+                        }
+                        sh "npm config set registry ${NEXUS_PROTOCOL}://${NEXUS_URL}/repository/${NEXUS_NPM_REPO}"
+                        sh "npm config set cafile ${OPENSHIFT_CERT}"
+                        sh "npm config set strict-ssl=false"
+                        sh "npm config set no_proxy=127.0.0.1,localhost"
+                        sh "npm config set sass_binary_path=${NODE_SASS_PATH}"
+                        sh "npm config set update-notifier=false"
+
+                        writeFile file: 'pom.xml', text: 
+"""<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>${GROUP_ID}</groupId>
+    <artifactId>${ARTIFACT_ID}</artifactId>
+    <version>${APP_VERSION}</version>
+</project>"""
+
+                        writeFile file: "${HOME}/.gradle/init.gradle", text:
+"""allprojects {
+    repositories {
+        maven {
+            url = '${NEXUS_PROTOCOL}://${NEXUS_URL}/repository/${NEXUS_MAVEN_REPO}'
+        }
+    }
+    buildscript {
+        repositories {
+            maven {
+                url = '${NEXUS_PROTOCOL}://${NEXUS_URL}/repository/${NEXUS_MAVEN_REPO}'
+            }
+        }
+    }
+}"""
+                    }
+                }
+            }
+        }
+       
+        stage('Code Analysis') {
+            steps {
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                    withSonarQubeEnv(SONAR_ENVIRONMENT) {
+                        sh "sonar-scanner -X -Dsonar.projectKey=${SONAR_PROJECT_KEY} -Dsonar.sources=src -Dsonar.nodejs.executable=${NODE10_PATH}/node"
+                    }
+                }
+            }
+        }
+        stage('Quality Gate Checking'){
+            agent {
+                label 'master'
+            }
+            steps{
+                script{
+                    timeout(time: 1, unit: 'HOURS') { 
+                        waitForQualityGate abortPipeline: true
+                    }
+                }
+            }
+            post {
+                success {
+                    script{
+                        SEC_PASS=1
+                    }
+                }
+                failure{ 
+                    script {
+                        createJiraIssue(JIRA_SITE, JIRA_PROJECT_KEY, 'source code scan failed', "${SONAR_URL}/dashboard?id=${SONAR_PROJECT_KEY}", 'Bug')
+                    }
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}"){
+                    script {
+                        APP_ENV.each { deployEnv ->
+                            sleep 1
+                            println("Build ${deployEnv.key} - ${deployEnv.value}")
+                            sh "rm -rf ${BITBUCKET_REPO}-${deployEnv.key}*"
+                            sh "cp -r ${BITBUCKET_REPO} ${BITBUCKET_REPO}-${deployEnv.key}"
+                            buildApp("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}-${deployEnv.key}", deployEnv.key, deployEnv.value, "${NEXUS_PROTOCOL}://${NEXUS_URL}/repository/${NEXUS_MAVEN_REPO}/", ANDROID_APP_NAME, RELEASE_TYPE)
+                        }
+                    }
+                }
+            }
+            post {  
+                failure {
+                    script {
+                        createJiraIssue(JIRA_SITE, JIRA_PROJECT_KEY, 'Mobile App Build Failed', "${JENKINS_URL}blue/organizations/jenkins/${OC_NAMESPACE}%2F${JOB_BASE_NAME}/detail/${JOB_BASE_NAME}/${BUILD_NUMBER}/pipeline", 'Bug')
+                    }
+                }
+            }
+        }
+/*
+        stage('DEV Test') {
+            steps {
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                    sh "rm -rf dev-test"
+                    sh "mkdir -p dev-test"
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/dev-test") {
+                    script {
+                        downloadSourceCode("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/dev-test", BITBUCKET_CREDENTIAL, BITBUCKET_URL, BITBUCKET_PROJECT, BITBUCKET_TEST_REPO, BITBUCKET_TEST_REPO_BRANCH)
+                    }
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/dev-test/android/junit") {
+                    sh 'mvn test'
+                    shutdownAndroidSimulator()
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/dev-test/ios/junit") {
+                    sh 'mvn test'
+                }
+            }
+            post{
+                always {
+                    script {
+                        shutdownAndroidSimulator()
+                        shutdownIosSimulator()
+                        createJiraXrayReport("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/dev-test", 'DEV', JIRA_PROJECT_KEY, JIRA_INSTANCE)
+                    }
+                    dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                        sh "rm -rf dev-test"
+                    }
+                }
+                success {
+                    script{
+                        QUA_PASS=1
+                    }
+                }
+            }
+        }
+*/
+
+        stage('Upload to Repo') {
+            steps {               
+              	dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+              		script {
+              		    pom = readMavenPom file: "pom.xml";
+              		    APP_ENV.each { deployEnv ->
+                            sleep 1
+                            println("upload ${deployEnv.key} - ${deployEnv.value}")
+                            uploadArtifactToNexus("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}", NEXUS_PROTOCOL, NEXUS_URL, NEXUS_REPOSITORY, NEXUS_CREDENTIAL_ID, pom.groupId, pom.artifactId, pom.version, deployEnv.key, 'apk', "${BITBUCKET_REPO}-${deployEnv.key}/platforms/android/build/outputs/apk/${RELEASE_TYPE}/${ANDROID_APP_NAME}")
+                        }
+                        uploadArtifactToNexus("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}", NEXUS_PROTOCOL, NEXUS_URL, NEXUS_REPOSITORY, NEXUS_CREDENTIAL_ID, pom.groupId, pom.artifactId, pom.version, '', 'pom', "pom.xml")
+               		}
+                }  
+            }
+            post{
+                success{
+                    script {
+                        if(SEC_PASS == 1) {
+                            associateNexusTag("${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_USER_TOKEN, NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'Security_Pass')
+                        }
+                        if(QUA_PASS == 1){
+                            associateNexusTag("${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_USER_TOKEN, NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'DEV_Quality_Pass')
+                        }
+                        sleep 5
+                    }
+                }
+            }
+        }
+
+/*
+        stage('SIT-Checking'){
+            steps{
+                script {
+                    sh script: "curl -s -u ${NEXUS_USER_TOKEN} -X GET '${NEXUS_PROTOCOL}://${NEXUS_URL}/service/rest/v1/search?repository=${NEXUS_REPOSITORY}&format=maven2&&group=${GROUP_ID}&name=${ARTIFACT_ID}&version=${APP_VERSION}' > test.out"
+                    resultstring =  readFile('test.out').trim()
+                    jsonObj = readJSON text: resultstring
+                    resultstring = "${jsonObj.items.tags}"
+                }
+                echo "Current tags: ${resultstring}"
+                sleep 5
+            }
+        }
+        stage('SIT') {
+            when {
+                allOf{
+                    expression {
+                        (resultstring =~ "DEV_Quality_Pass")
+                    }
+                    expression {
+                        (resultstring =~ "DEV_Security_Pass")
+                    }    
+                }
+            }
+            steps {
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                    sh "rm -rf sit-test"
+                    sh "mkdir -p sit-test"
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test") {
+                    script {
+                        downloadSourceCode("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test", BITBUCKET_CREDENTIAL, BITBUCKET_URL, BITBUCKET_PROJECT, BITBUCKET_TEST_REPO, BITBUCKET_TEST_REPO_BRANCH)
+                    }
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test/android/junit") {
+                    script {
+                        downloadArtifact("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test/android/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'sit', 'apk', ANDROID_APP_NAME)
+                        checksumSha1("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test/android/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'sit', 'apk', ANDROID_APP_NAME)
+                        sh 'mvn test'
+                        shutdownAndroidSimulator()
+                    }
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test/ios/junit") {
+                    script {
+                        downloadArtifact("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test/ios/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'sit', 'zip', 'emulator.zip')
+                        checksumSha1("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test/ios/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'sit', 'zip', 'emulator.zip')
+                        sh 'mvn test'
+                    }
+                }
+            }
+            post{
+                always {
+                    script {
+                        shutdownAndroidSimulator()
+                        shutdownIosSimulator()
+                        createJiraXrayReport("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/sit-test", 'SIT', JIRA_PROJECT_KEY, JIRA_INSTANCE)
+                    }
+                    dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                        sh "rm -rf sit-test"
+                    }
+                }
+                success{
+                    script {
+                        associateNexusTag("${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_USER_TOKEN, NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'SIT_Quality_Pass')
+                        sleep 5
+                    }
+                }
+            }
+        }
+        stage('UAT-Checking'){
+            steps{
+                script {NEXUS_URL
+                    sh script: "curl -s -u ${NEXUS_USER_TOKEN} -X GET '${NEXUS_PROTOCOL}://${NEXUS_URL}/service/rest/v1/search?repository=${NEXUS_REPOSITORY}&format=maven2&&${GROUP_ID}&name=${ARTIFACT_ID}&version=${APP_VERSION}' > test.out"
+                    resultstring =  readFile('test.out').trim()
+                    jsonObj = readJSON text: resultstring
+                    resultstring = "${jsonObj.items.tags}"
+                }
+                echo "Current tags: ${resultstring}"
+                sleep 5
+            }
+        }
+        stage('UAT') {
+            when {
+                allOf{
+                    expression {
+                        (resultstring =~ "SIT_Quality_Pass")
+                    }
+                }
+            }
+            steps {
+                input "Deploy to UAT ?"
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                    sh "rm -rf uat-test"
+                    sh "mkdir -p uat-test"
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test") {
+                    script {
+                        downloadSourceCode("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test", BITBUCKET_CREDENTIAL, BITBUCKET_URL, BITBUCKET_PROJECT, BITBUCKET_TEST_REPO, BITBUCKET_TEST_REPO_BRANCH)
+                    }
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test/android/junit") {
+                    script {
+                        downloadArtifact("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test/android/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, '', 'apk', ANDROID_APP_NAME)
+                        checksumSha1("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test/android/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, '', 'apk', ANDROID_APP_NAME)
+                        sh 'mvn test'
+                        shutdownAndroidSimulator()
+                    }
+                }
+                dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test/ios/junit") {
+                    script {
+                        downloadArtifact("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test/ios/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, '', 'zip', 'emulator.zip')
+                        checksumSha1("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test/ios/junit", "${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, '', 'zip', 'emulator.zip')
+                        sh 'mvn test'
+                    }
+                }
+                input "UAT PASS"
+            }
+            post{
+                always {
+                    script {
+                        shutdownAndroidSimulator()
+                        shutdownIosSimulator()
+                        createJiraXrayReport("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}/uat-test", 'UAT', JIRA_PROJECT_KEY, JIRA_INSTANCE)
+                    }
+                    dir("${WORKING_DIRECTORY}/${BITBUCKET_PROJECT}/${BITBUCKET_REPO}") {
+                        sh "rm -rf uat-test"
+                    }
+                }
+                success{
+                    script {
+                        associateNexusTag("${NEXUS_PROTOCOL}://${NEXUS_URL}", NEXUS_USER_TOKEN, NEXUS_REPOSITORY, GROUP_ID, ARTIFACT_ID, APP_VERSION, 'UAT_Quality_Pass')
+                        sleep 5
+                    }
+                }
+            }
+        }
+*/
+    }
+}
+
+        
+
