@@ -1,0 +1,33 @@
+CatfishAirPlugin -> addEmbeddedFrameworks -> success
+CatfishAirPlugin -> copyAndAddToXcodeProj success
+SenseTimePlugin -> copyAndAddToXcodeProj success
+new pbx project written with localization groups
+/Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios purged from project cache
+Discovered plugin "mx.ferreyra.callnumber" in config.xml. Adding it to the project
+Fetching plugin "mx.ferreyra.callnumber@~0.0.2" via npm
+Plugin "call-number" already installed on android.
+Plugin "call-number" already installed on ios.
+Building project: /Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/inMotion-SIT-MVP.xcworkspace
+	Configuration: Debug
+	Platform: device
+User defaults from command line:
+    IDEArchivePathOverride = /Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/inMotion-SIT-MVP.xcarchive
+
+Build settings from command line:
+    CONFIGURATION_BUILD_DIR = /Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/build/device
+    SHARED_PRECOMPS_DIR = /Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/build/sharedpch
+
+Build settings from configuration file '/Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/cordova/build-debug.xcconfig':
+    CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES
+    CODE_SIGN_ENTITLEMENTS = $(PROJECT_DIR)/$(PROJECT_NAME)/Entitlements-$(CONFIGURATION).plist
+    CODE_SIGN_IDENTITY = China CITIC Bank International Limited
+    DEBUG_INFORMATION_FORMAT = dwarf
+    ENABLE_BITCODE = NO
+    GCC_PREPROCESSOR_DEFINITIONS = DEBUG=1
+    HEADER_SEARCH_PATHS = "$(TARGET_BUILD_DIR)/usr/local/lib/include" "$(OBJROOT)/UninstalledProducts/include" "$(OBJROOT)/UninstalledProducts/$(PLATFORM_NAME)/include" "$(BUILT_PRODUCTS_DIR)"
+    OTHER_LDFLAGS = -ObjC
+    SWIFT_OBJC_BRIDGING_HEADER = $(PROJECT_DIR)/$(PROJECT_NAME)/Bridging-Header.h
+
+** EXPORT FAILED **
+
+Error: Error code 65 for command: xcodebuild with args: -exportArchive,-archivePath,inMotion-SIT-MVP.xcarchive,-exportOptionsPlist,/Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/exportOptions.plist,-exportPath,/Users/jenkins/work/jenkins-build/inmo/directbank-mobile-sit/platforms/ios/build/device
